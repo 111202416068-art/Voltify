@@ -77,4 +77,44 @@ class Auth extends BaseController
         session()->destroy();
         return redirect()->to('/');
     }
+
+    public function seed()
+    {
+        $passwordHash = password_hash('admin123', PASSWORD_BCRYPT);
+
+        // 1. Reset / Daftarkan Admin
+        $admin = $this->userModel->where('email', 'admin@voltify.com')->first();
+        if ($admin) {
+            $this->userModel->update($admin['id'], [
+                'password' => $passwordHash,
+                'role'     => 'admin'
+            ]);
+        } else {
+            $this->userModel->insert([
+                'name'     => 'Super Admin',
+                'email'    => 'admin@voltify.com',
+                'password' => $passwordHash,
+                'role'     => 'admin'
+            ]);
+        }
+
+        // 2. Reset / Daftarkan User Demo
+        $user = $this->userModel->where('email', 'user@voltify.com')->first();
+        if ($user) {
+            $this->userModel->update($user['id'], [
+                'password' => $passwordHash,
+                'role'     => 'user'
+            ]);
+        } else {
+            $this->userModel->insert([
+                'name'     => 'User Demo',
+                'email'    => 'user@voltify.com',
+                'password' => $passwordHash,
+                'role'     => 'user'
+            ]);
+        }
+
+        session()->setFlashdata('success', 'Akun Demo BERHASIL di-reset! Silakan login dengan password: admin123');
+        return redirect()->to('login');
+    }
 }

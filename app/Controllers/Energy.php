@@ -9,8 +9,7 @@ class Energy extends BaseController
 {
     protected $deviceModel;
     protected $userModel;
-    protected $tariffPerKwh  = 1444.70;
-    protected $monthlyBudget = 250000;
+    protected $tariffPerKwh = 1444.70;
 
     public function __construct()
     {
@@ -18,20 +17,20 @@ class Energy extends BaseController
         $this->userModel   = new UserModel();
     }
 
-    // 1. Landing Page Estetis (Mirip SaaS Modern)
     public function index()
     {
         return view('landing');
     }
 
-    // 2. Dashboard Pribadi User
+    // --- DASHBOARD USER ---
     public function dashboard()
     {
-        if (!session()->get('logged_in')) {
-            return redirect()->to('/login');
-        }
+        if (!session()->get('logged_in')) return redirect()->to('login');
 
         $userId = session()->get('user_id');
+        $user = $this->userModel->find($userId);
+        $budget = session()->get('budget') ?? 250000;
+
         $devices = $this->deviceModel->where('user_id', $userId)->findAll() ?? [];
 
         $totalMonthlyKwh = 0;
@@ -50,13 +49,14 @@ class Energy extends BaseController
         }
 
         $totalCost = $totalMonthlyKwh * $this->tariffPerKwh;
-        $budgetPercent = min(round(($totalCost / $this->monthlyBudget) * 100), 100);
+        $budgetPercent = ($budget > 0) ? min(round(($totalCost / $budget) * 100), 100) : 0;
 
         $data = [
+            'user'             => $user,
             'devices'          => $devices,
             'totalCost'        => $totalCost,
             'totalKwh'         => $totalMonthlyKwh,
-            'budget'           => $this->monthlyBudget,
+            'budget'           => $budget,
             'budgetPercent'    => $budgetPercent,
             'dangerousDevices' => $dangerousDevices
         ];
@@ -64,37 +64,66 @@ class Energy extends BaseController
         return view('energy/dashboard', $data);
     }
 
-    // 3. Dashboard Khusus Admin
-    public function admin()
+    // --- PENGATURAN PROFIL USER ---
+    public function profile()
     {
-        if (!session()->get('logged_in') || session()->get('role') !== 'admin') {
-            return redirect()->to('/dashboard');
-        }
+        if (!session()->get('logged_in')) return redirect()->to('login');
+        
+        $userId = session()->get('user_id');
+        $user = $this->userModel->find($userId);
+        $budget = session()->get('budget') ?? 250000;
 
-        $allUsers = $this->userModel->findAll();
-        $allDevices = $this->deviceModel->findAll();
-
-        $totalGlobalKwh = 0;
-        foreach ($allDevices as $d) {
-            if ($d['is_turned_on'] == 1) {
-                $totalGlobalKwh += (($d['watt'] * $d['daily_hours']) / 1000) * 30;
-            }
-        }
-
-        $data = [
-            'users'          => $allUsers,
-            'totalUsers'     => count($allUsers),
-            'totalDevices'   => count($allDevices),
-            'totalGlobalKwh' => $totalGlobalKwh,
-            'totalGlobalCost'=> $totalGlobalKwh * $this->tariffPerKwh
-        ];
-
-        return view('admin/index', $data);
+        return view('energy/profile', ['user' => $user, 'budget' => $budget]);
     }
 
+    public function updateProfile()
+    {
+        if (!session()->get('logged_in')) return redirect()->to('login');
+
+        $userId = session()->get('user_id');
+        $name = $this->request->getPost('name');
+        $email = $this->request->getPost('email');
+        $budget = (int) $this->request->getPost('budget');
+        $newPassword = $this->request->getPost('new_password');
+
+        $updateData = [
+            'name'  => $name,
+            'email' => $email
+        ];
+
+        if (!empty($newPassword)) {
+            $updateData['password'] = password_hash($newPassword, PASSWORD_BCRYPT);
+        }
+
+        $this->userModel->update($userId, $updateData);
+        session()->set([
+            'name'   => $name,
+            'email'  => $email,
+            'budget' => $budget
+        ]);
+
+        session()->setFlashdata('success', 'Profil & preferensi berhasil diperbarui!');
+        return redirect()->to('profile');
+    }
+
+    public function deleteAccount()
+    {
+        if (!session()->get('logged_in')) return redirect()->to('login');
+
+        $userId = session()->get('user_id');
+        // Hapus perangkat milik user terlebih dahulu
+        $this->deviceModel->where('user_id', $userId)->delete();
+        // Hapus user
+        $this->userModel->delete($userId);
+
+        session()->destroy();
+        return redirect()->to('/')->with('success', 'Akun kamu telah berhasil dihapus permanen.');
+    }
+
+    // --- MANAJEMEN PERANGKAT USER ---
     public function add()
     {
-        if (!session()->get('logged_in')) return redirect()->to('/login');
+        if (!session()->get('logged_in')) return redirect()->to('login');
 
         $this->deviceModel->insert([
             'user_id'      => session()->get('user_id'),
@@ -104,32 +133,47 @@ class Energy extends BaseController
             'is_turned_on' => 1
         ]);
 
-        return redirect()->to('/dashboard');
+        return redirect()->to('dashboard');
     }
 
     public function toggle($id)
     {
-        if (!session()->get('logged_in')) return redirect()->to('/login');
+        if (!session()->get('logged_in')) return redirect()->to('login');
 
-        $device = $this->deviceModel->where('user_id', session()->get('user_id'))->find($id);
+        $userId = session()->get('user_id');
+        $device = $this->deviceModel->find($id);
+
+        // Jika bukan admin dan bukan pemilik perangkat, tolak
+        if (session()->get('role') !== 'admin' && $device['user_id'] != $userId) {
+            return redirect()->to('dashboard');
+        }
+
         if ($device) {
             $newStatus = ($device['is_turned_on'] == 1) ? 0 : 1;
             $this->deviceModel->update($id, ['is_turned_on' => $newStatus]);
         }
-        return redirect()->to('/dashboard');
+
+        return redirect()->back();
     }
 
     public function delete($id)
     {
-        if (!session()->get('logged_in')) return redirect()->to('/login');
+        if (!session()->get('logged_in')) return redirect()->to('login');
 
-        $this->deviceModel->where('user_id', session()->get('user_id'))->delete($id);
-        return redirect()->to('/dashboard');
+        $userId = session()->get('user_id');
+        $device = $this->deviceModel->find($id);
+
+        if (session()->get('role') !== 'admin' && $device['user_id'] != $userId) {
+            return redirect()->to('dashboard');
+        }
+
+        $this->deviceModel->delete($id);
+        return redirect()->back();
     }
 
     public function autoCutOff()
     {
-        if (!session()->get('logged_in')) return redirect()->to('/login');
+        if (!session()->get('logged_in')) return redirect()->to('login');
 
         $userId = session()->get('user_id');
         $heavyDevices = $this->deviceModel
@@ -149,11 +193,72 @@ class Energy extends BaseController
         $savedRupiah = $savedKwh * $this->tariffPerKwh;
 
         if ($count > 0) {
-            session()->setFlashdata('cutoff_success', "Auto Cut-Off berhasil! {$count} perangkat dimatikan. Hemat Rp" . number_format($savedRupiah, 0, ',', '.') . "/bln.");
+            session()->setFlashdata('cutoff_success', "Auto Cut-Off berhasil! {$count} perangkat dimatikan. Potensi hemat Rp" . number_format($savedRupiah, 0, ',', '.') . "/bln.");
         } else {
-            session()->setFlashdata('cutoff_info', "Semua perangkat berdaya besar sudah mati.");
+            session()->setFlashdata('cutoff_info', "Semua perangkat berdaya tinggi sudah dalam kondisi non-aktif.");
         }
 
-        return redirect()->to('/dashboard');
+        return redirect()->to('dashboard');
+    }
+
+    // --- DASHBOARD ADMIN ---
+    public function admin()
+    {
+        if (!session()->get('logged_in') || session()->get('role') !== 'admin') {
+            return redirect()->to('dashboard');
+        }
+
+        $allUsers = $this->userModel->findAll();
+        $allDevices = $this->deviceModel
+            ->select('devices.*, users.name as user_name, users.email as user_email')
+            ->join('users', 'users.id = devices.user_id', 'left')
+            ->findAll();
+
+        $totalGlobalKwh = 0;
+        foreach ($allDevices as $d) {
+            if ($d['is_turned_on'] == 1) {
+                $totalGlobalKwh += (($d['watt'] * $d['daily_hours']) / 1000) * 30;
+            }
+        }
+
+        $data = [
+            'users'           => $allUsers,
+            'devices'         => $allDevices,
+            'totalUsers'      => count($allUsers),
+            'totalDevices'    => count($allDevices),
+            'totalGlobalKwh'  => $totalGlobalKwh,
+            'totalGlobalCost' => $totalGlobalKwh * $this->tariffPerKwh
+        ];
+
+        return view('admin/index', $data);
+    }
+
+    public function adminToggleRole($id)
+    {
+        if (!session()->get('logged_in') || session()->get('role') !== 'admin') return redirect()->to('dashboard');
+
+        $user = $this->userModel->find($id);
+        if ($user) {
+            $newRole = ($user['role'] === 'admin') ? 'user' : 'admin';
+            $this->userModel->update($id, ['role' => $newRole]);
+            session()->setFlashdata('success', "Role untuk {$user['name']} diubah menjadi " . strtoupper($newRole));
+        }
+
+        return redirect()->to('admin');
+    }
+
+    public function adminDeleteUser($id)
+    {
+        if (!session()->get('logged_in') || session()->get('role') !== 'admin') return redirect()->to('dashboard');
+
+        if ($id == session()->get('user_id')) {
+            session()->setFlashdata('error', 'Tidak bisa menghapus akun admin yang sedang aktif!');
+            return redirect()->to('admin');
+        }
+
+        $this->deviceModel->where('user_id', $id)->delete();
+        $this->userModel->delete($id);
+        session()->setFlashdata('success', 'User dan semua datanya berhasil dihapus oleh Admin.');
+        return redirect()->to('admin');
     }
 }
