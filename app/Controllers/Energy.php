@@ -51,14 +51,18 @@ class Energy extends BaseController
         $totalCost = $totalMonthlyKwh * $this->tariffPerKwh;
         $budgetPercent = ($budget > 0) ? min(round(($totalCost / $budget) * 100), 100) : 0;
 
+   // Hitung berapa perangkat berat yang sedang mati (ter-cut off)
+        $hasCutOffDevices = count(array_filter($devices, fn($d) => $d['watt'] >= 150 && $d['is_turned_on'] == 0)) > 0;
+
         $data = [
-            'user'             => $user,
-            'devices'          => $devices,
-            'totalCost'        => $totalCost,
-            'totalKwh'         => $totalMonthlyKwh,
-            'budget'           => $budget,
-            'budgetPercent'    => $budgetPercent,
-            'dangerousDevices' => $dangerousDevices
+            'user'              => $user,
+            'devices'           => $devices,
+            'totalCost'         => $totalCost,
+            'totalKwh'          => $totalMonthlyKwh,
+            'budget'            => $budget,
+            'budgetPercent'     => $budgetPercent,
+            'dangerousDevices'  => $dangerousDevices,
+            'hasCutOffDevices'  => $hasCutOffDevices
         ];
 
         return view('energy/dashboard', $data);
@@ -68,7 +72,7 @@ class Energy extends BaseController
     public function profile()
     {
         if (!session()->get('logged_in')) return redirect()->to('login');
-        
+
         $userId = session()->get('user_id');
         $user = $this->userModel->find($userId);
         $budget = session()->get('budget') ?? 250000;
@@ -196,6 +200,35 @@ class Energy extends BaseController
             session()->setFlashdata('cutoff_success', "Auto Cut-Off berhasil! {$count} perangkat dimatikan. Potensi hemat Rp" . number_format($savedRupiah, 0, ',', '.') . "/bln.");
         } else {
             session()->setFlashdata('cutoff_info', "Semua perangkat berdaya tinggi sudah dalam kondisi non-aktif.");
+        }
+
+        return redirect()->to('dashboard');
+    }
+
+    // Fitur Menyalakan Kembali Perangkat (Mode Tiba di Rumah)
+    public function restorePower()
+    {
+        if (!session()->get('logged_in')) return redirect()->to('login');
+
+        $userId = session()->get('user_id');
+
+        // Cari semua alat daya besar (>= 150W) milik user yang saat ini sedang MATI (0)
+        $cutoffDevices = $this->deviceModel
+            ->where('user_id', $userId)
+            ->where('watt >=', 150)
+            ->where('is_turned_on', 0)
+            ->findAll();
+
+        $count = count($cutoffDevices);
+
+        foreach ($cutoffDevices as $d) {
+            $this->deviceModel->update($d['id'], ['is_turned_on' => 1]);
+        }
+
+        if ($count > 0) {
+            session()->setFlashdata('cutoff_success', "Daya dipulihkan! {$count} perangkat kembali menyala normal.");
+        } else {
+            session()->setFlashdata('cutoff_info', "Tidak ada perangkat terputus yang perlu dipulihkan.");
         }
 
         return redirect()->to('dashboard');

@@ -52,24 +52,42 @@ class Auth extends BaseController
         return view('auth/register');
     }
 
-    public function processRegister()
+   public function processRegister()
     {
-        $email = $this->request->getPost('email');
+        $name     = trim($this->request->getPost('name'));
+        $email    = trim($this->request->getPost('email'));
+        $password = $this->request->getPost('password');
 
-        if ($this->userModel->where('email', $email)->first()) {
-            session()->setFlashdata('error', 'Email sudah terdaftar!');
+        // Validasi input kosong
+        if (empty($name) || empty($email) || empty($password)) {
+            session()->setFlashdata('error', 'Semua kolom formulir wajib diisi!');
             return redirect()->to('register')->withInput();
         }
 
-        $this->userModel->insert([
-            'name'     => $this->request->getPost('name'),
-            'email'    => $email,
-            'password' => password_hash($this->request->getPost('password'), PASSWORD_BCRYPT),
-            'role'     => 'user'
-        ]);
+        // Cek apakah email sudah terdaftar
+        $existing = $this->userModel->where('email', $email)->first();
+        if ($existing) {
+            session()->setFlashdata('error', 'Email sudah terdaftar! Silakan gunakan email lain atau langsung login.');
+            return redirect()->to('register')->withInput();
+        }
 
-        session()->setFlashdata('success', 'Pendaftaran berhasil! Silakan masuk.');
-        return redirect()->to('login');
+        // Enkripsi password & simpan
+        $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
+
+        try {
+            $this->userModel->insert([
+                'name'     => $name,
+                'email'    => $email,
+                'password' => $hashedPassword,
+                'role'     => 'user'
+            ]);
+
+            session()->setFlashdata('success', 'Pendaftaran akun berhasil! Silakan masuk.');
+            return redirect()->to('login');
+        } catch (\Throwable $e) {
+            session()->setFlashdata('error', 'Gagal mendaftar: ' . $e->getMessage());
+            return redirect()->to('register')->withInput();
+        }
     }
 
     public function logout()

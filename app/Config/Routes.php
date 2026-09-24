@@ -31,3 +31,5 @@ $routes->get('energy/autocutoff', 'Energy::autoCutOff');
 $routes->get('admin', 'Energy::admin');
 $routes->get('admin/toggle-role/(:num)', 'Energy::adminToggleRole/$1');
 $routes->get('admin/delete-user/(:num)', 'Energy::adminDeleteUser/$1');
+
+$routes->get('energy/restore', 'Energy::restorePower');
