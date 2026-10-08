@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Generator Favicon Voltify</title>
+</head>
+<body style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#FAF7F2; font-family:sans-serif;">
+
+    <h3>Preview Logo Favicon Voltify (Pasti Berhasil)</h3>
+    
+    <canvas id="faviconCanvas" width="64" height="64" style="border-radius:16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></canvas>
+    
+    <br>
+    <button onclick="downloadFavicon()" style="padding: 12px 24px; background: #C85A32; color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 14px;">
+        Download favicon.png
+    </button>
+
+    <script>
+        window.onload = function() {
+            const canvas = document.getElementById('faviconCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // 1. Background Terracotta / Clay-600
+            ctx.fillStyle = '#C85A32';
+            ctx.beginPath();
+            ctx.roundRect(0, 0, 64, 64, 16);
+            ctx.fill();
+
+            // 2. Gambar Path Ikon Daun FontAwesome Presisi
+            ctx.fillStyle = '#FFFFFF';
+            const leafPath = new Path2D('M16.8 5.7C17.4 3 19.8 1 22.6 1C39.4 1 53 14.6 53 31.4C53 34.2 51 36.6 48.3 37.2L35.4 40.1C34 40.4 32.8 41.3 32.1 42.6L25.3 54.8C23.9 57.3 20.8 58.2 18.3 56.8C15.8 55.4 14.9 52.3 16.3 49.8L21.4 40.6C21.8 39.9 22.4 39.4 23.2 39.2L33.7 36.8C35.2 36.5 36.5 35.2 36.8 33.7L39.2 23.2C39.4 22.4 39.9 21.8 40.6 21.4L49.8 16.3C52.3 14.9 55.4 15.8 56.8 18.3C58.2 20.8 57.3 23.9 54.8 25.3L42.6 32.1C41.3 32.8 40.4 34 40.1 35.4L37.2 48.3C36.6 51 34.2 53 31.4 53C14.6 53 1 39.4 1 22.6C1 19.8 3 17.4 5.7 16.8L16.8 5.7Z');
+
+            // Skala dan Posisi di Tengah Canvas
+            ctx.save();
+            ctx.translate(12, 12);
+            ctx.scale(0.75, 0.75);
+            ctx.fill(leafPath);
+            ctx.restore();
+        };
+
+        function downloadFavicon() {
+            const canvas = document.getElementById('faviconCanvas');
+            const link = document.createElement('a');
+            link.download = 'favicon.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+    </script>
+</body>
+</html>

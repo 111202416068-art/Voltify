@@ -52,7 +52,7 @@ class Auth extends BaseController
         return view('auth/register');
     }
 
-   public function processRegister()
+    public function processRegister()
     {
         $name     = trim($this->request->getPost('name'));
         $email    = trim($this->request->getPost('email'));
